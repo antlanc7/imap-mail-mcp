@@ -6,7 +6,8 @@ Python, nessuna installazione: lo avvia `uv`.
 
 - Le cartelle si aprono con `EXAMINE` e i messaggi si leggono con `BODY.PEEK`: nessun flag cambiato,
   niente spostato o cancellato, niente invio.
-- La password sta nel portachiavi del sistema (libsecret su Linux, Portachiavi su macOS), mai in un file.
+- La password sta nell'archivio del sistema (libsecret su Linux, Portachiavi su macOS, Gestione
+  credenziali su Windows), mai in un file.
 - Solo IMAP su SSL (porta 993 predefinita) con utente e password.
 
 ## Strumenti
@@ -21,7 +22,8 @@ Python, nessuna installazione: lo avvia `uv`.
 
 ## Installazione
 
-Serve [`uv`](https://docs.astral.sh/uv/) nel `PATH` (`brew install uv` su macOS).
+Serve [`uv`](https://docs.astral.sh/uv/) nel `PATH`: `brew install uv` su macOS,
+`winget install --id=astral-sh.uv -e` su Windows.
 
 ### 1. Password nel portachiavi
 
@@ -37,6 +39,12 @@ Linux (serve `secret-tool`, pacchetto `libsecret-tools` o `libsecret`):
 
 ```bash
 secret-tool store --label="IMAP nome@dominio.it" service imap-mail account nome@dominio.it
+```
+
+Windows (chiede la password; la salva in Gestione credenziali):
+
+```powershell
+uvx keyring set imap-mail nome@dominio.it
 ```
 
 Al primo accesso macOS può chiedere di consentire l'uso del Portachiavi.
@@ -62,6 +70,8 @@ Per cambiare i valori: `claude plugin configure imap-mail@imap-mail-mcp`. Per gl
 `claude plugin marketplace update imap-mail-mcp`.
 
 ### In alternativa: server MCP senza plugin
+
+Linux e macOS (su Windows lo stesso, con un percorso Windows per `server.py`):
 
 ```bash
 mkdir -p ~/.claude/mcp/imap-mail

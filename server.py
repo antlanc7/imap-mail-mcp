@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["mcp>=1.2,<2"]
+# dependencies = ["mcp>=1.2,<2", "keyring>=24; sys_platform == 'win32'"]
 # ///
 """Server MCP IMAP in sola lettura.
 
@@ -11,6 +11,7 @@
 - La password viene dal portachiavi del sistema, mai da file o variabili d'ambiente:
     Linux (libsecret): secret-tool store --label="IMAP <account>" service imap-mail account <account>
     macOS (Portachiavi): security add-generic-password -s imap-mail -a <account> -w
+    Windows (Gestione credenziali): uvx keyring set imap-mail <account>
 """
 
 import email
@@ -36,6 +37,16 @@ mcp = FastMCP("imap-mail")
 
 
 def _password(account: str) -> str:
+    if sys.platform == "win32":
+        import keyring  # solo su Windows: Gestione credenziali (Windows Credential Manager)
+
+        pw = keyring.get_password("imap-mail", account)
+        if not pw:
+            raise RuntimeError(
+                f"Password di {account} non trovata in Gestione credenziali. "
+                f"Salvarla con: uvx keyring set imap-mail {account}"
+            )
+        return pw
     if sys.platform == "darwin":
         cmd = ["security", "find-generic-password", "-s", "imap-mail", "-a", account, "-w"]
         hint = f"security add-generic-password -s imap-mail -a {account} -w"
@@ -111,6 +122,11 @@ def _text_body(msg) -> str:
         text = re.sub(r"<[^>]+>", "", text)
         text = re.sub(r"\n\s*\n+", "\n\n", text)
     return text.strip()
+
+
+# Nomi riservati di Windows, vietati anche con un'estensione (CON.txt)
+_WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                 *(f"LPT{i}" for i in range(1, 10))}
 
 
 def _attachments(msg):
@@ -290,7 +306,9 @@ def save_attachments(
         for name, part in _attachments(msg):
             if name_filter and name_filter.lower().lstrip("*") not in name.lower():
                 continue
-            safe = re.sub(r"[^\w.\- ()]+", "_", Path(name).name) or "allegato"
+            safe = re.sub(r"[^\w.\- ()]+", "_", Path(name).name).strip(" .") or "allegato"
+            if Path(safe).stem.upper() in _WIN_RESERVED:
+                safe = "_" + safe
             target = dest / safe
             i = 1
             while target.exists():
