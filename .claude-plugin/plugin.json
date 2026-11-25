@@ -1,0 +1,47 @@
+{
+  "name": "imap-mail",
+  "version": "0.1.0",
+  "description": "Lettura della posta IMAP in sola lettura (server MCP): cartelle, ricerca, messaggi e allegati. Password nel portachiavi del sistema.",
+  "author": {
+    "name": "antlanc7"
+  },
+  "homepage": "https://github.com/antlanc7/imap-mail-mcp",
+  "repository": "https://github.com/antlanc7/imap-mail-mcp",
+  "license": "MIT",
+  "userConfig": {
+    "imap_host": {
+      "type": "string",
+      "title": "Server IMAP",
+      "description": "Nome del server IMAP (SSL), per esempio mail.dominio.it",
+      "required": true
+    },
+    "imap_port": {
+      "type": "number",
+      "title": "Porta IMAP",
+      "description": "Porta IMAP su SSL",
+      "default": 993
+    },
+    "imap_accounts": {
+      "type": "string",
+      "title": "Caselle",
+      "description": "Indirizzi separati da virgole; il primo è il predefinito. La password di ciascuno va salvata nel portachiavi (vedi README).",
+      "required": true
+    }
+  },
+  "mcpServers": {
+    "imap-mail": {
+      "command": "uv",
+      "args": [
+        "run",
+        "-q",
+        "--script",
+        "${CLAUDE_PLUGIN_ROOT}/server.py"
+      ],
+      "env": {
+        "IMAP_HOST": "${user_config.imap_host}",
+        "IMAP_PORT": "${user_config.imap_port}",
+        "IMAP_ACCOUNTS": "${user_config.imap_accounts}"
+      }
+    }
+  }
+}

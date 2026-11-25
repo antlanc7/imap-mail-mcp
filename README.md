@@ -1,7 +1,8 @@
 # imap-mail-mcp
 
 Server [MCP](https://modelcontextprotocol.io) in **sola lettura** per leggere la posta IMAP da
-Claude Code (o da un altro client MCP). Un solo file Python, nessuna installazione: lo avvia `uv`.
+Claude Code (o da un altro client MCP), installabile come plugin di Claude Code. Un solo file
+Python, nessuna installazione: lo avvia `uv`.
 
 - Le cartelle si aprono con `EXAMINE` e i messaggi si leggono con `BODY.PEEK`: nessun flag cambiato,
   niente spostato o cancellato, niente invio.
@@ -20,15 +21,11 @@ Claude Code (o da un altro client MCP). Un solo file Python, nessuna installazio
 
 ## Installazione
 
-Serve [`uv`](https://docs.astral.sh/uv/) (`brew install uv` su macOS).
+Serve [`uv`](https://docs.astral.sh/uv/) nel `PATH` (`brew install uv` su macOS).
 
-```bash
-mkdir -p ~/.claude/mcp/imap-mail
-curl -fsSL -o ~/.claude/mcp/imap-mail/server.py \
-  https://raw.githubusercontent.com/antlanc7/imap-mail-mcp/main/server.py
-```
+### 1. Password nel portachiavi
 
-### Password nel portachiavi
+Una voce per ogni casella; la password non va mai nella configurazione.
 
 macOS (chiede la password senza lasciarla nella cronologia):
 
@@ -42,11 +39,34 @@ Linux (serve `secret-tool`, pacchetto `libsecret-tools` o `libsecret`):
 secret-tool store --label="IMAP nome@dominio.it" service imap-mail account nome@dominio.it
 ```
 
-Una voce per ogni casella. Al primo accesso macOS può chiedere di consentire l'uso del Portachiavi.
+Al primo accesso macOS può chiedere di consentire l'uso del Portachiavi.
 
-### Registrazione in Claude Code
+### 2. Plugin di Claude Code
+
+Dentro Claude Code:
+
+```
+/plugin install imap-mail --marketplace antlanc7/imap-mail-mcp
+```
+
+Claude Code chiede server IMAP, porta (993) e caselle (separate da virgole, la prima è la
+predefinita). Dalla shell, in alternativa:
 
 ```bash
+claude plugin marketplace add antlanc7/imap-mail-mcp
+claude plugin install imap-mail@imap-mail-mcp \
+  --config imap_host=mail.dominio.it --config imap_accounts=nome@dominio.it,altra@dominio.it
+```
+
+Per cambiare i valori: `claude plugin configure imap-mail@imap-mail-mcp`. Per gli aggiornamenti:
+`claude plugin marketplace update imap-mail-mcp`.
+
+### In alternativa: server MCP senza plugin
+
+```bash
+mkdir -p ~/.claude/mcp/imap-mail
+curl -fsSL -o ~/.claude/mcp/imap-mail/server.py \
+  https://raw.githubusercontent.com/antlanc7/imap-mail-mcp/main/server.py
 claude mcp add imap-mail -s user \
   -e IMAP_HOST=mail.dominio.it \
   -e IMAP_ACCOUNTS=nome@dominio.it,altra@dominio.it \

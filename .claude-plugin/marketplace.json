@@ -1,0 +1,14 @@
+{
+  "name": "imap-mail-mcp",
+  "description": "Server MCP IMAP in sola lettura per Claude Code",
+  "owner": {
+    "name": "antlanc7"
+  },
+  "plugins": [
+    {
+      "name": "imap-mail",
+      "source": "./",
+      "description": "Lettura della posta IMAP in sola lettura (server MCP)"
+    }
+  ]
+}

@@ -28,7 +28,8 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 HOST = os.environ.get("IMAP_HOST", "").strip()
-PORT = int(os.environ.get("IMAP_PORT", "993"))
+_port = os.environ.get("IMAP_PORT", "").strip()
+PORT = int(_port) if _port.isdigit() else 993  # vuoto o non sostituito dal plugin: 993
 ACCOUNTS = [a.strip() for a in os.environ.get("IMAP_ACCOUNTS", "").split(",") if a.strip()]
 
 mcp = FastMCP("imap-mail")
