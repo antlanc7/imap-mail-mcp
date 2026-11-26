@@ -1,6 +1,6 @@
 {
   "name": "imap-mail",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Lettura della posta IMAP in sola lettura (server MCP): cartelle, ricerca, messaggi e allegati. Password nel portachiavi del sistema.",
   "author": {
     "name": "antlanc7"

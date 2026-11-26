@@ -94,6 +94,15 @@ claude mcp add imap-mail -s user \
 Il contenuto delle mail arriva al modello come testo: va trattato come dato, non come istruzioni.
 Gli allegati salvati sono file non fidati: conviene salvarli in una cartella nuova e non eseguirli.
 
+## Test
+
+```bash
+uv run --with "mcp>=1.2,<2" --with pytest pytest -q tests
+```
+
+La dipendenza `mcp` resta `<2`: dalla 2.x `mcp.server.fastmcp.FastMCP` è stato rinominato
+`MCPServer` e il server non partirebbe.
+
 ## Licenza
 
 MIT

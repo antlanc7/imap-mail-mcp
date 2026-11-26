@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["mcp>=1.2,<2", "keyring>=24; sys_platform == 'win32'"]
+# # mcp va tenuto <2: dalla 2.x mcp.server.fastmcp.FastMCP non esiste più (rinominato MCPServer)
 # ///
 """Server MCP IMAP in sola lettura.
 
@@ -136,6 +137,122 @@ def _attachments(msg):
             yield _dec(name), part
 
 
+def _fetch_responses(data):
+    """Ricompone le risposte FETCH spezzate da imaplib.
+
+    imaplib restituisce, per ogni risposta, una tupla (testo fino a {n}, literal) per ciascun
+    literal e poi un bytes con il resto della riga; senza literal, un solo bytes.
+    """
+    buf: list[bytes] = []
+    for item in data or []:
+        if isinstance(item, tuple):
+            buf += [item[0], item[1]]
+        elif isinstance(item, bytes):
+            buf.append(item)
+            yield buf
+            buf = []
+    if buf:
+        yield buf
+
+
+def _parse_fetch(resp) -> dict:
+    """Interpreta una risposta '<n> FETCH (...)' e restituisce {CHIAVE: valore}.
+
+    resp: bytes oppure lista alternata [testo, literal, testo, literal, ..., testo].
+    Valori: str per gli atomi, bytes per stringhe e literal, None per NIL, liste per (...).
+    """
+    parts = [resp] if isinstance(resp, bytes) else list(resp)
+    # Token: ("lit", bytes) per i literal, altrimenti caratteri del testo
+    tokens: list = []
+    for i, p in enumerate(parts):
+        if i % 2:
+            tokens.append(("lit", p))
+        else:
+            text = re.sub(rb"\{\d+\}\r?\n?$", b"", p) if i + 1 < len(parts) else p
+            tokens.extend(text[j:j + 1] for j in range(len(text)))
+    pos = 0
+
+    def parse_list():
+        nonlocal pos
+        out = []
+        while pos < len(tokens):
+            t = tokens[pos]
+            if isinstance(t, tuple):
+                out.append(t[1])
+                pos += 1
+            elif t in (b" ", b"\r", b"\n"):
+                pos += 1
+            elif t == b"(":
+                pos += 1
+                out.append(parse_list())
+            elif t == b")":
+                pos += 1
+                return out
+            elif t == b'"':
+                pos += 1
+                s = bytearray()
+                while pos < len(tokens) and tokens[pos] != b'"':
+                    if tokens[pos] == b"\\":
+                        pos += 1
+                    if pos < len(tokens) and not isinstance(tokens[pos], tuple):
+                        s += tokens[pos]
+                    pos += 1
+                pos += 1
+                out.append(bytes(s))
+            else:  # atomo, con [...] incluse (es. BODY[HEADER.FIELDS (DATE FROM)])
+                s = bytearray()
+                depth = 0
+                while pos < len(tokens) and not isinstance(tokens[pos], tuple):
+                    c = tokens[pos]
+                    if depth == 0 and c in (b" ", b"(", b")", b"\r", b"\n"):
+                        break
+                    depth += (c == b"[") - (c == b"]")
+                    s += c
+                    pos += 1
+                atom = s.decode(errors="replace")
+                out.append(None if atom.upper() == "NIL" else atom)
+        return out
+
+    top = parse_list()
+    items = next((x for x in top if isinstance(x, list)), [])
+    result = {}
+    for k, v in zip(items[0::2], items[1::2]):
+        if isinstance(k, str):
+            key = k.upper()
+            result["BODY[HEADER]" if key.startswith("BODY[HEADER") else key] = v
+    return result
+
+
+def _bodystructure_names(bs) -> list[str]:
+    """Nomi degli allegati (parametri name/filename, anche RFC 2231) da un BODYSTRUCTURE."""
+    names: list[str] = []
+
+    def walk(node):
+        if not isinstance(node, list):
+            return
+        if node and len(node) % 2 == 0 and all(isinstance(x, bytes) for x in node):
+            pairs = [(k.decode(errors="replace").lower(), v.decode(errors="replace"))
+                     for k, v in zip(node[0::2], node[1::2])]
+            for base in ("filename", "name"):
+                found = [(k, v) for k, v in pairs if k == base or k.startswith(base + "*")]
+                if found:
+                    if any("*" in k for k, _ in found):
+                        try:
+                            decoded = email.utils.decode_params([("x", ""), *found])[1:]
+                            val = email.utils.unquote(email.utils.collapse_rfc2231_value(decoded[0][1]))
+                        except Exception:  # noqa: BLE001
+                            val = found[0][1]
+                    else:
+                        val = found[0][1]
+                    names.append(_dec(val))
+            return
+        for child in node:
+            walk(child)
+
+    walk(bs)
+    return list(dict.fromkeys(n for n in names if n))
+
+
 @mcp.tool()
 def list_accounts() -> list[str]:
     """Elenca le caselle configurate (la prima è quella predefinita)."""
@@ -220,29 +337,34 @@ def search(
             "(FLAGS BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (DATE FROM TO CC SUBJECT)])",
         )
         rows = {}
-        for item in data or []:
-            if not isinstance(item, tuple):
+        # Le stringhe del BODYSTRUCTURE (nomi lunghi o con caratteri speciali) possono
+        # arrivare come literal {n}: si ricompone la risposta e si cercano le voci per nome.
+        for resp in _fetch_responses(data if typ == "OK" else []):
+            try:
+                fields = _parse_fetch(resp)
+            except Exception:  # noqa: BLE001
                 continue
-            meta = item[0].decode(errors="replace")
-            m = re.search(r"UID (\d+)", meta)
-            if not m:
+            uid = fields.get("UID")
+            if not uid:
                 continue
-            h = email.message_from_bytes(item[1])
+            hdr = fields.get("BODY[HEADER]")
+            h = email.message_from_bytes(hdr if isinstance(hdr, bytes) else b"")
             date = h.get("Date")
             try:
                 date = email.utils.parsedate_to_datetime(date).astimezone().isoformat(timespec="minutes")
             except Exception:  # noqa: BLE001
                 pass
-            names = re.findall(r'"(?:name|filename)" "([^"]+)"', meta, flags=re.I)
-            rows[m.group(1)] = {
-                "uid": m.group(1),
+            flags = fields.get("FLAGS")
+            rows[uid] = {
+                "uid": uid,
                 "date": date,
                 "from": _dec(h.get("From")),
                 "to": _dec(h.get("To")),
                 "cc": _dec(h.get("Cc")),
                 "subject": _dec(h.get("Subject")),
-                "seen": "\\Seen" in meta,
-                "attachments": list(dict.fromkeys(_dec(n) for n in names)),
+                "seen": isinstance(flags, list) and any(
+                    isinstance(f, str) and f.lower() == "\\seen" for f in flags),
+                "attachments": _bodystructure_names(fields.get("BODYSTRUCTURE")),
             }
         return [rows[u.decode()] for u in uids if u.decode() in rows]
     finally:
