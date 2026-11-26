@@ -22,8 +22,10 @@ Python, nessuna installazione: lo avvia `uv`.
 
 ## Installazione
 
-Serve [`uv`](https://docs.astral.sh/uv/) nel `PATH`: `brew install uv` su macOS,
-`winget install --id=astral-sh.uv -e` su Windows.
+Serve [`uv`](https://docs.astral.sh/uv/) nel `PATH`: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+su Linux, `brew install uv` su macOS, `winget install --id=astral-sh.uv -e` su Windows. Python non
+serve: lo scarica `uv`. Se `uv` manca, il plugin lo segnala all'avvio di ogni sessione con il
+comando per installarlo (hook `SessionStart`; su Windows funziona se Claude Code usa Git Bash per gli hook).
 
 ### 1. Password nel portachiavi
 

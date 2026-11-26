@@ -1,0 +1,16 @@
+{
+  "description": "Avvisa se manca uv, necessario per avviare il server MCP imap-mail",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/check-uv.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
